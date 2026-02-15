@@ -175,9 +175,9 @@ if page == "📘 PDF Analyzer":
             with st.spinner("Processing PDF..."):
                 reader = PdfReader(pdf)
                 text = ""
-                for page_ in reader.pages:
-                    if page_.extract_text():
-                        text += page_.extract_text() + "\n"
+                for p in reader.pages:
+                    if p.extract_text():
+                        text += p.extract_text() + "\n"
 
                 splitter = RecursiveCharacterTextSplitter(
                     chunk_size=500,
@@ -191,9 +191,12 @@ if page == "📘 PDF Analyzer":
 
                 st.session_state.vector_db = FAISS.from_texts(chunks, embeddings)
 
-        question = st.text_input("Ask a question")
+        # ✅ FORM — prevents infinite loop
+        with st.form("pdf_question_form", clear_on_submit=True):
+            question = st.text_input("Ask a question")
+            submitted = st.form_submit_button("Ask")
 
-        if question:
+        if submitted and question:
             llm = load_llm()
             docs = st.session_state.vector_db.similarity_search(question, k=5)
 
@@ -212,9 +215,7 @@ Rules:
             chain = create_stuff_documents_chain(llm, prompt)
             result = chain.invoke({"context": docs, "question": question})
 
-            # ✅ FIXED LINE
             answer = result if isinstance(result, str) else result.get("output_text", "")
-
             st.session_state.chat_history.append((question, answer))
             st.rerun()
 
@@ -232,7 +233,6 @@ Rules:
 # ==================== IMAGE Q&A ====================
 if page == "🖼 Image Q&A":
     img_file = st.file_uploader("Upload Image", type=["png", "jpg", "jpeg"])
-
     if img_file:
         img = Image.open(img_file).convert("RGB")
         st.image(img, use_column_width=True)
