@@ -175,9 +175,9 @@ if page == "📘 PDF Analyzer":
             with st.spinner("Processing PDF..."):
                 reader = PdfReader(pdf)
                 text = ""
-                for page_ in reader.pages:
-                    if page_.extract_text():
-                        text += page_.extract_text() + "\n"
+                for p in reader.pages:
+                    if p.extract_text():
+                        text += p.extract_text() + "\n"
 
                 splitter = RecursiveCharacterTextSplitter(
                     chunk_size=500,
@@ -212,7 +212,8 @@ Rules:
             chain = create_stuff_documents_chain(llm, prompt)
             result = chain.invoke({"context": docs, "question": question})
 
-            answer = result["output_text"]
+            # ✅ FIX HERE
+            answer = result if isinstance(result, str) else result.get("output_text", "")
 
             st.session_state.chat_history.append((question, answer))
             st.rerun()
@@ -225,14 +226,12 @@ Rules:
             st.divider()
 
         st.markdown('<div id="chat-bottom"></div>', unsafe_allow_html=True)
-
         if st.session_state.chat_history:
             scroll_to_bottom()
 
 # ==================== IMAGE Q&A ====================
 if page == "🖼 Image Q&A":
     img_file = st.file_uploader("Upload Image", type=["png", "jpg", "jpeg"])
-
     if img_file:
         img = Image.open(img_file).convert("RGB")
         st.image(img, use_column_width=True)
