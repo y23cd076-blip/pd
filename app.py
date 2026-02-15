@@ -193,8 +193,14 @@ Rules:
 """)
 
             chain = create_stuff_documents_chain(llm, prompt)
-            res = chain.invoke({"context": docs, "question": q})
-            answer = res["output_text"]
+           res = chain.invoke({"context": docs, "question": q})
+
+# LangChain version-safe handling
+if isinstance(res, dict):
+    answer = res.get("output_text", "")
+else:
+    answer = res
+
 
             st.session_state.chat_history.append((q, answer))
 
