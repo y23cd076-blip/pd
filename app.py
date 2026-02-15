@@ -89,7 +89,6 @@ def login_ui():
         with tab1:
             u = st.text_input("Username")
             p = st.text_input("Password", type="password")
-
             if st.button("Login"):
                 if u in st.session_state.users and st.session_state.users[u] == hash_password(p):
                     st.session_state.authenticated = True
@@ -100,7 +99,6 @@ def login_ui():
         with tab2:
             nu = st.text_input("New Username")
             np = st.text_input("New Password", type="password")
-
             if st.button("Create Account"):
                 if nu in st.session_state.users:
                     st.warning("User already exists")
@@ -208,6 +206,7 @@ if mode == "📘 PDF Analyzer":
                 st.session_state.vector_db = FAISS.from_texts(chunks, embeddings)
 
         q = st.text_input("Ask a question")
+
         if q:
             llm = load_llm()
             docs = st.session_state.vector_db.similarity_search(q, k=5)
@@ -234,10 +233,15 @@ Rules:
 
             st.session_state.chat_history.append((q, answer))
 
-        for uq, ua in st.session_state.chat_history:
-            st.markdown(f"🧑 **You:** {uq}")
-            st.markdown(f"🤖 **AI:** {ua}")
-            st.divider()
+        # -------- CHAT DISPLAY (QUESTION ON TOP, ANSWER BELOW) --------
+        st.markdown("## 💬 Conversation")
+
+        chat_container = st.container()
+        with chat_container:
+            for uq, ua in st.session_state.chat_history:
+                st.markdown(f"🧑 **You:** {uq}")
+                st.markdown(f"🤖 **AI:** {ua}")
+                st.divider()
 
 # ==================== IMAGE Q&A ====================
 if mode == "🖼 Image Q&A":
