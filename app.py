@@ -139,10 +139,20 @@ if st.sidebar.button("Logout"):
         st.session_state[k] = defaults[k]
     st.rerun()
 
-if st.sidebar.button("🗑 Clear Chat"):
-    st.session_state.chat_history = []
-
 mode = st.sidebar.radio("Mode", ["📘 PDF Analyzer", "🖼 Image Q&A"])
+
+# -------------------- SIDEBAR HISTORY --------------------
+st.sidebar.markdown("### 💬 Chat History")
+
+if st.session_state.chat_history:
+    for i, (q, _) in enumerate(st.session_state.chat_history[-5:], start=1):
+        st.sidebar.markdown(f"{i}. {q[:40]}...")
+
+    if st.sidebar.button("🧹 Clear History"):
+        st.session_state.chat_history = []
+        st.rerun()
+else:
+    st.sidebar.caption("No history yet")
 
 # -------------------- HERO --------------------
 col1, col2 = st.columns([1, 2])
@@ -215,13 +225,8 @@ Rules:
 """)
 
             chain = create_stuff_documents_chain(llm, prompt)
+            res = chain.invoke({"context": docs, "question": q})
 
-            res = chain.invoke({
-                "context": docs,
-                "question": q
-            })
-
-            # LangChain version-safe handling
             if isinstance(res, dict):
                 answer = res.get("output_text", "")
             else:
