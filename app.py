@@ -15,7 +15,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from transformers import BlipProcessor, BlipForQuestionAnswering
 
 # -------------------- CONFIG --------------------
-st.set_page_config("SlideSense", "📘", layout="wide")
+st.set_page_config(page_title="SlideSense", page_icon="📘", layout="wide")
 USERS_FILE = "users.json"
 
 # -------------------- HELPERS --------------------
@@ -37,7 +37,8 @@ def load_lottie(url):
     return r.json() if r.status_code == 200 else None
 
 def type_text(text, speed=0.03):
-    box, out = st.empty(), ""
+    box = st.empty()
+    out = ""
     for c in text:
         out += c
         box.markdown(f"### {out}")
@@ -73,16 +74,22 @@ for k, v in defaults.items():
 # -------------------- AUTH UI --------------------
 def login_ui():
     col1, col2 = st.columns(2)
+
     with col1:
-        st_lottie(load_lottie("https://assets10.lottiefiles.com/packages/lf20_jcikwtux.json"), height=300)
+        st_lottie(
+            load_lottie("https://assets10.lottiefiles.com/packages/lf20_jcikwtux.json"),
+            height=300
+        )
 
     with col2:
         type_text("🔐 Welcome to SlideSense")
+
         tab1, tab2 = st.tabs(["Login", "Sign Up"])
 
         with tab1:
             u = st.text_input("Username")
             p = st.text_input("Password", type="password")
+
             if st.button("Login"):
                 if u in st.session_state.users and st.session_state.users[u] == hash_password(p):
                     st.session_state.authenticated = True
@@ -93,6 +100,7 @@ def login_ui():
         with tab2:
             nu = st.text_input("New Username")
             np = st.text_input("New Password", type="password")
+
             if st.button("Create Account"):
                 if nu in st.session_state.users:
                     st.warning("User already exists")
@@ -106,8 +114,8 @@ def answer_image_question(image, question):
     processor, model, device = load_blip()
     inputs = processor(image, question, return_tensors="pt").to(device)
 
-    out = model.generate(**inputs, max_length=10, num_beams=5)
-    short_answer = processor.decode(out[0], skip_special_tokens=True)
+    outputs = model.generate(**inputs, max_length=10, num_beams=5)
+    short_answer = processor.decode(outputs[0], skip_special_tokens=True)
 
     llm = load_llm()
     prompt = f"""
@@ -124,7 +132,9 @@ if not st.session_state.authenticated:
 
 # -------------------- SIDEBAR --------------------
 st.sidebar.success("Logged in ✅")
+
 if st.sidebar.button("Logout"):
+    st.cache_resource.clear()
     for k in defaults:
         st.session_state[k] = defaults[k]
     st.rerun()
@@ -132,12 +142,17 @@ if st.sidebar.button("Logout"):
 if st.sidebar.button("🗑 Clear Chat"):
     st.session_state.chat_history = []
 
-page = st.sidebar.radio("Mode", ["📘 PDF Analyzer", "🖼 Image Q&A"])
+mode = st.sidebar.radio("Mode", ["📘 PDF Analyzer", "🖼 Image Q&A"])
 
 # -------------------- HERO --------------------
 col1, col2 = st.columns([1, 2])
+
 with col1:
-    st_lottie(load_lottie("https://assets10.lottiefiles.com/packages/lf20_qp1q7mct.json"), height=250)
+    st_lottie(
+        load_lottie("https://assets10.lottiefiles.com/packages/lf20_qp1q7mct.json"),
+        height=250
+    )
+
 with col2:
     type_text("📘 SlideSense AI Platform")
     st.markdown("### Smart Learning | Smart Vision | Smart AI")
@@ -145,11 +160,12 @@ with col2:
 st.divider()
 
 # ==================== PDF ANALYZER ====================
-if page == "📘 PDF Analyzer":
-    pdf = st.file_uploader("Upload PDF", type="pdf")
+if mode == "📘 PDF Analyzer":
+    pdf = st.file_uploader("Upload PDF", type="pdf", key="pdf_uploader")
 
     if pdf:
         pdf_id = f"{pdf.name}_{pdf.size}"
+
         if st.session_state.current_pdf_id != pdf_id:
             st.session_state.current_pdf_id = pdf_id
             st.session_state.vector_db = None
@@ -158,14 +174,20 @@ if page == "📘 PDF Analyzer":
         if st.session_state.vector_db is None:
             with st.spinner("Processing PDF..."):
                 reader = PdfReader(pdf)
-                text = "".join(
-                    page.extract_text() + "\n"
-                    for page in reader.pages
-                    if page.extract_text()
-                )
+                text = ""
+
+                for pdf_page in reader.pages:
+                    extracted = pdf_page.extract_text()
+                    if extracted:
+                        text += extracted + "\n"
+
+                if not text.strip():
+                    st.error("No readable text found in PDF")
+                    st.stop()
 
                 splitter = RecursiveCharacterTextSplitter(
-                    chunk_size=500, chunk_overlap=80
+                    chunk_size=500,
+                    chunk_overlap=80
                 )
                 chunks = splitter.split_text(text)
 
@@ -193,30 +215,34 @@ Rules:
 """)
 
             chain = create_stuff_documents_chain(llm, prompt)
-           res = chain.invoke({"context": docs, "question": q})
 
-# LangChain version-safe handling
-if isinstance(res, dict):
-    answer = res.get("output_text", "")
-else:
-    answer = res
+            res = chain.invoke({
+                "context": docs,
+                "question": q
+            })
 
+            # LangChain version-safe handling
+            if isinstance(res, dict):
+                answer = res.get("output_text", "")
+            else:
+                answer = res
 
             st.session_state.chat_history.append((q, answer))
 
-        for q, a in st.session_state.chat_history:
-            st.markdown(f"🧑 **You:** {q}")
-            st.markdown(f"🤖 **AI:** {a}")
+        for uq, ua in st.session_state.chat_history:
+            st.markdown(f"🧑 **You:** {uq}")
+            st.markdown(f"🤖 **AI:** {ua}")
             st.divider()
 
 # ==================== IMAGE Q&A ====================
-if page == "🖼 Image Q&A":
+if mode == "🖼 Image Q&A":
     img_file = st.file_uploader("Upload Image", type=["png", "jpg", "jpeg"])
+
     if img_file:
         img = Image.open(img_file).convert("RGB")
         st.image(img, use_column_width=True)
 
-        q = st.text_input("Ask a question about the image")
-        if q:
+        question = st.text_input("Ask a question about the image")
+        if question:
             with st.spinner("Analyzing image..."):
-                st.success(answer_image_question(img, q))
+                st.success(answer_image_question(img, question))
