@@ -15,7 +15,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from transformers import BlipProcessor, BlipForQuestionAnswering
 
 # -------------------- CONFIG --------------------
-st.set_page_config(page_title="SlideSense", page_icon="📘", layout="wide")
+st.set_page_config("SlideSense", "📘", layout="wide")
 USERS_FILE = "users.json"
 
 # -------------------- HELPERS --------------------
@@ -43,6 +43,19 @@ def type_text(text, speed=0.03):
         out += c
         box.markdown(f"### {out}")
         time.sleep(speed)
+
+def scroll_to_bottom():
+    st.markdown(
+        """
+        <script>
+            var chat = document.getElementById("chat-bottom");
+            if (chat) {
+                chat.scrollIntoView({behavior: "smooth"});
+            }
+        </script>
+        """,
+        unsafe_allow_html=True
+    )
 
 # -------------------- CACHED MODELS --------------------
 @st.cache_resource
@@ -74,16 +87,11 @@ for k, v in defaults.items():
 # -------------------- AUTH UI --------------------
 def login_ui():
     col1, col2 = st.columns(2)
-
     with col1:
-        st_lottie(
-            load_lottie("https://assets10.lottiefiles.com/packages/lf20_jcikwtux.json"),
-            height=300
-        )
+        st_lottie(load_lottie("https://assets10.lottiefiles.com/packages/lf20_jcikwtux.json"), height=300)
 
     with col2:
         type_text("🔐 Welcome to SlideSense")
-
         tab1, tab2 = st.tabs(["Login", "Sign Up"])
 
         with tab1:
@@ -112,8 +120,8 @@ def answer_image_question(image, question):
     processor, model, device = load_blip()
     inputs = processor(image, question, return_tensors="pt").to(device)
 
-    outputs = model.generate(**inputs, max_length=10, num_beams=5)
-    short_answer = processor.decode(outputs[0], skip_special_tokens=True)
+    out = model.generate(**inputs, max_length=10, num_beams=5)
+    short_answer = processor.decode(out[0], skip_special_tokens=True)
 
     llm = load_llm()
     prompt = f"""
@@ -132,35 +140,19 @@ if not st.session_state.authenticated:
 st.sidebar.success("Logged in ✅")
 
 if st.sidebar.button("Logout"):
-    st.cache_resource.clear()
     for k in defaults:
         st.session_state[k] = defaults[k]
     st.rerun()
 
-mode = st.sidebar.radio("Mode", ["📘 PDF Analyzer", "🖼 Image Q&A"])
+if st.sidebar.button("🗑 Clear Chat History"):
+    st.session_state.chat_history = []
 
-# -------------------- SIDEBAR HISTORY --------------------
-st.sidebar.markdown("### 💬 Chat History")
-
-if st.session_state.chat_history:
-    for i, (q, _) in enumerate(st.session_state.chat_history[-5:], start=1):
-        st.sidebar.markdown(f"{i}. {q[:40]}...")
-
-    if st.sidebar.button("🧹 Clear History"):
-        st.session_state.chat_history = []
-        st.rerun()
-else:
-    st.sidebar.caption("No history yet")
+page = st.sidebar.radio("Mode", ["📘 PDF Analyzer", "🖼 Image Q&A"])
 
 # -------------------- HERO --------------------
 col1, col2 = st.columns([1, 2])
-
 with col1:
-    st_lottie(
-        load_lottie("https://assets10.lottiefiles.com/packages/lf20_qp1q7mct.json"),
-        height=250
-    )
-
+    st_lottie(load_lottie("https://assets10.lottiefiles.com/packages/lf20_qp1q7mct.json"), height=250)
 with col2:
     type_text("📘 SlideSense AI Platform")
     st.markdown("### Smart Learning | Smart Vision | Smart AI")
@@ -168,8 +160,8 @@ with col2:
 st.divider()
 
 # ==================== PDF ANALYZER ====================
-if mode == "📘 PDF Analyzer":
-    pdf = st.file_uploader("Upload PDF", type="pdf", key="pdf_uploader")
+if page == "📘 PDF Analyzer":
+    pdf = st.file_uploader("Upload PDF", type="pdf")
 
     if pdf:
         pdf_id = f"{pdf.name}_{pdf.size}"
@@ -183,15 +175,9 @@ if mode == "📘 PDF Analyzer":
             with st.spinner("Processing PDF..."):
                 reader = PdfReader(pdf)
                 text = ""
-
-                for pdf_page in reader.pages:
-                    extracted = pdf_page.extract_text()
-                    if extracted:
-                        text += extracted + "\n"
-
-                if not text.strip():
-                    st.error("No readable text found in PDF")
-                    st.stop()
+                for page_ in reader.pages:
+                    if page_.extract_text():
+                        text += page_.extract_text() + "\n"
 
                 splitter = RecursiveCharacterTextSplitter(
                     chunk_size=500,
@@ -205,11 +191,11 @@ if mode == "📘 PDF Analyzer":
 
                 st.session_state.vector_db = FAISS.from_texts(chunks, embeddings)
 
-        q = st.text_input("Ask a question")
+        question = st.text_input("Ask a question")
 
-        if q:
+        if question:
             llm = load_llm()
-            docs = st.session_state.vector_db.similarity_search(q, k=5)
+            docs = st.session_state.vector_db.similarity_search(question, k=5)
 
             prompt = ChatPromptTemplate.from_template("""
 Context:
@@ -224,34 +210,34 @@ Rules:
 """)
 
             chain = create_stuff_documents_chain(llm, prompt)
-            res = chain.invoke({"context": docs, "question": q})
+            result = chain.invoke({"context": docs, "question": question})
 
-            if isinstance(res, dict):
-                answer = res.get("output_text", "")
-            else:
-                answer = res
+            answer = result["output_text"]
 
-            st.session_state.chat_history.append((q, answer))
+            st.session_state.chat_history.append((question, answer))
+            st.rerun()
 
-        # -------- CHAT DISPLAY (QUESTION ON TOP, ANSWER BELOW) --------
         st.markdown("## 💬 Conversation")
 
-        chat_container = st.container()
-        with chat_container:
-            for uq, ua in st.session_state.chat_history:
-                st.markdown(f"🧑 **You:** {uq}")
-                st.markdown(f"🤖 **AI:** {ua}")
-                st.divider()
+        for q, a in st.session_state.chat_history:
+            st.markdown(f"🧑 **You:** {q}")
+            st.markdown(f"🤖 **AI:** {a}")
+            st.divider()
+
+        st.markdown('<div id="chat-bottom"></div>', unsafe_allow_html=True)
+
+        if st.session_state.chat_history:
+            scroll_to_bottom()
 
 # ==================== IMAGE Q&A ====================
-if mode == "🖼 Image Q&A":
+if page == "🖼 Image Q&A":
     img_file = st.file_uploader("Upload Image", type=["png", "jpg", "jpeg"])
 
     if img_file:
         img = Image.open(img_file).convert("RGB")
         st.image(img, use_column_width=True)
 
-        question = st.text_input("Ask a question about the image")
-        if question:
+        q = st.text_input("Ask a question about the image")
+        if q:
             with st.spinner("Analyzing image..."):
-                st.success(answer_image_question(img, question))
+                st.success(answer_image_question(img, q))
